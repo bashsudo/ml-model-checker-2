@@ -180,6 +180,8 @@ def primary_pipeline(
     output_dir: str = "./experiment_results",
     seed: int = 42,
     salt_pepper_p: float = 0.05,
+    models_dir: str = "models",
+    variance: float = 1.0,
 ):
     """
     Primary pipeline for BNN training and Dirichlet distribution analysis.
@@ -193,7 +195,7 @@ def primary_pipeline(
         epochs: Number of training epochs
         batch_size: Batch size for training
         lr: Learning rate
-        model_path: Path to save/load model
+        model_path: Path to save/load model (deprecated, use models_dir instead)
         device: Device to use (cpu/cuda), None for auto-detect
         kl_weight: KL divergence weight (default: 1/N)
         train: If True, train the model (otherwise load existing)
@@ -204,6 +206,8 @@ def primary_pipeline(
         output_dir: Directory to save plots
         seed: Random seed for reproducibility
         salt_pepper_p: Probability for salt-and-pepper noise
+        models_dir: Base directory for saving models (default: "models")
+        variance: Variance value for the model (default: 1.0)
     """
     if digits is None:
         digits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -239,10 +243,15 @@ def primary_pipeline(
     print("MODEL SETUP")
     print(f"{'='*70}")
     print("Creating Bayesian Neural Network...")
-    model = BayesianNetwork()
+    model = BayesianNetwork(variance=variance)
+
+    # Determine model save path (structured path)
+    models_base_dir = Path(models_dir)
+    models_subdir = models_base_dir / "primary"
+    model_filename = f"bnn_seed_{seed}_var_{variance}_epoch_{epochs}.pth"
+    model_path_obj = models_subdir / model_filename
 
     # Train or load model
-    model_path_obj = Path(model_path)
     if train or not model_path_obj.exists():
         print(f"\n{'='*70}")
         print("TRAINING MODEL")
@@ -261,7 +270,7 @@ def primary_pipeline(
             verbose=True,
         )
 
-        # Save model
+        # Save model to structured path
         model_path_obj.parent.mkdir(parents=True, exist_ok=True)
         torch.save(model.state_dict(), model_path_obj)
         print(f"\n  Model saved to: {model_path_obj}")
@@ -355,6 +364,7 @@ def variance_epoch_pipeline(
     epoch_values: Optional[List[int]] = None,
     target_class: Optional[int] = None,
     visualization_types: Optional[set[str]] = None,
+    models_dir: str = "models",
 ):
     """
     Variance-epoch pipeline for analyzing how variance and epochs affect Dirichlet PDFs.
@@ -379,6 +389,7 @@ def variance_epoch_pipeline(
         target_class: Which digit class to visualize (default: same as digit being analyzed)
         visualization_types: Set of visualization types to generate: {"variance", "epoch"} or both
                              (default: {"variance", "epoch"} - generates both)
+        models_dir: Base directory for saving models (default: "models")
     """
     if variance_values is None:
         variance_values = [1, 16]
@@ -416,6 +427,11 @@ def variance_epoch_pipeline(
     print("Loading MNIST test dataset...")
     test_dataset = load_mnist(root=data_dir, train=False, download=True)
     print(f"  Test set size: {len(test_dataset)}")
+
+    # Set up models directory
+    models_base_dir = Path(models_dir)
+    models_subdir = models_base_dir / "var-and-epoch"
+    models_subdir.mkdir(parents=True, exist_ok=True)
 
     # Analyze each digit
     for digit in digits:
@@ -462,25 +478,53 @@ def variance_epoch_pipeline(
             # Store alphas for this variance across epochs
             alphas_by_epoch_for_variance[variance] = {}
 
+            # Track previous epoch to enable incremental training
+            previous_epochs = 0
+
             # For each epoch value
             for epochs in epoch_values:
-                print(f"\n    Training for {epochs} epochs...")
+                # Determine model save path
+                model_filename = f"bnn_seed_{seed}_var_{variance}_epoch_{epochs}.pth"
+                model_path_obj = models_subdir / model_filename
 
-                # Create fresh optimizer for each training run
-                optimizer = optim.Adam(model.parameters(), lr=lr)
-                criterion = nn.CrossEntropyLoss()
+                # Try to load existing model
+                if model_path_obj.exists():
+                    print(f"\n    Loading existing model for {epochs} epochs...")
+                    model.load_state_dict(
+                        torch.load(model_path_obj, map_location=device)
+                    )
+                    model.to(device)
+                    print(f"      Model loaded from: {model_path_obj}")
+                    previous_epochs = epochs
+                else:
+                    # Check if we can continue from a previous epoch model
+                    epochs_to_train = epochs - previous_epochs
+                    
+                    if epochs_to_train > 0:
+                        print(f"\n    Training for {epochs_to_train} more epochs (total: {epochs})...")
 
-                # Train model
-                train_bnn(
-                    model=model,
-                    train_loader=train_loader,
-                    optimizer=optimizer,
-                    criterion=criterion,
-                    epochs=epochs,
-                    device=device,
-                    kl_weight=kl_weight,
-                    verbose=False,
-                )
+                        # Create fresh optimizer for each training run
+                        optimizer = optim.Adam(model.parameters(), lr=lr)
+                        criterion = nn.CrossEntropyLoss()
+
+                        # Train model incrementally
+                        train_bnn(
+                            model=model,
+                            train_loader=train_loader,
+                            optimizer=optimizer,
+                            criterion=criterion,
+                            epochs=epochs_to_train,
+                            device=device,
+                            kl_weight=kl_weight,
+                            verbose=False,
+                        )
+
+                        # Save model
+                        torch.save(model.state_dict(), model_path_obj)
+                        print(f"      Model saved to: {model_path_obj}")
+                        previous_epochs = epochs
+                    else:
+                        print(f"\n    Model already trained for {epochs} epochs, skipping...")
 
                 # Get prediction
                 model.eval()

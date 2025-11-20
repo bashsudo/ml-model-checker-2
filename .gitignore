@@ -1,3 +1,4 @@
+models/
 experiment_results/
 data/
 *.pth
