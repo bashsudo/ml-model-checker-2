@@ -22,15 +22,20 @@ class BayesianNetwork(nn.Module):
     - Output Layer: 64 -> 10 classes (deterministic)
     """
 
-    def __init__(self):
-        """Initialize Bayesian Neural Network."""
+    def __init__(self, variance: float = 1.0):
+        """
+        Initialize Bayesian Neural Network.
+
+        Args:
+            variance: Scaling factor for random noise in weight and bias sampling
+        """
         super().__init__()
 
         # First Bayesian layer: 784 input features to 128 hidden units
-        self.bayes_layer1 = BayesianLayer(784, 128)
+        self.bayes_layer1 = BayesianLayer(784, 128, variance=variance)
 
         # Second Bayesian layer: 128 to 64 hidden units
-        self.bayes_layer2 = BayesianLayer(128, 64)
+        self.bayes_layer2 = BayesianLayer(128, 64, variance=variance)
 
         # Final deterministic output layer: 64 -> 10 (digits 0-9)
         self.out = nn.Linear(64, 10)

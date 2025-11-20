@@ -1,5 +1,7 @@
 from typing import Optional
 
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -185,3 +187,217 @@ def visualize_dirichlet_pdf_single_digit(
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  Dirichlet PDF plot (single digit) saved to: {output_path}")
+
+
+def visualize_dirichlet_pdf_single_digit_by_variance(
+    alphas_by_variance: dict[float, np.ndarray],
+    digit: int,
+    target_class: int,
+    k: float,
+    output_path: str,
+    num_samples: int = 10000,
+    rng: Optional[np.random.Generator] = None,
+):
+    """
+    Visualize Dirichlet PDF for a single digit class across different variance values.
+
+    For a particular epoch, shows how the PDFs vary by variance.
+    Each PDF is plotted with transparency and a color corresponding to its variance value.
+
+    Args:
+        alphas_by_variance: Dictionary mapping variance values to Dirichlet alpha parameters
+        digit: True digit label being analyzed
+        target_class: Which digit class (0-9) to visualize
+        k: Number of standard deviations for threshold
+        output_path: Path to save figure
+        num_samples: Number of samples from Dirichlet for PDF estimation
+        rng: Random number generator
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    if target_class < 0 or target_class >= len(list(alphas_by_variance.values())[0]):
+        raise ValueError(
+            f"target_class must be between 0 and {len(list(alphas_by_variance.values())[0])-1}"
+        )
+
+    # Get variance values and sort them
+    variances = sorted(alphas_by_variance.keys())
+
+    # Create colormap for variances
+    cmap = cm.get_cmap("viridis")
+    norm = mcolors.Normalize(vmin=min(variances), vmax=max(variances))
+    colors = [cmap(norm(v)) for v in variances]
+
+    # Create single figure
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Plot PDF for each variance
+    for i, variance in enumerate(variances):
+        alpha = alphas_by_variance[variance]
+
+        # Sample from Dirichlet distribution
+        dirichlet_samples = rng.dirichlet(alpha, size=num_samples)
+
+        # Plot histogram with transparency and color
+        ax.hist(
+            dirichlet_samples[:, target_class],
+            bins=50,
+            density=True,
+            alpha=0.4,
+            color=colors[i],
+            label=f"Variance={variance}",
+        )
+
+    # Compute mean and std for the first variance (for reference lines)
+    first_alpha = alphas_by_variance[variances[0]]
+    mean, variance_stats = dirichlet_mean_variance(first_alpha)
+    std_dev = np.sqrt(variance_stats)
+    mean_val = mean[target_class]
+    std_val = std_dev[target_class]
+
+    # Add orange dashed lines for k standard deviations from mean
+    ax.axvline(
+        mean_val + k * std_val,
+        color="orange",
+        linestyle="--",
+        linewidth=2,
+        alpha=0.7,
+        label=f"±{k}σ threshold",
+    )
+    ax.axvline(
+        mean_val - k * std_val,
+        color="orange",
+        linestyle="--",
+        linewidth=2,
+        alpha=0.7,
+    )
+    # Also mark the mean
+    ax.axvline(
+        mean_val,
+        color="green",
+        linestyle="-",
+        linewidth=1.5,
+        alpha=0.5,
+        label="Mean (reference)",
+    )
+
+    ax.set_xlabel(f"P(Digit {target_class})")
+    ax.set_ylabel("Density")
+    ax.set_title(
+        f"Dirichlet PDF for Digit {target_class} by Variance (Analyzing Digit {digit})"
+    )
+    ax.grid(True, alpha=0.3)
+    ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Dirichlet PDF plot (by variance) saved to: {output_path}")
+
+
+def visualize_dirichlet_pdf_single_digit_by_epoch(
+    alphas_by_epoch: dict[int, np.ndarray],
+    digit: int,
+    target_class: int,
+    k: float,
+    output_path: str,
+    num_samples: int = 10000,
+    rng: Optional[np.random.Generator] = None,
+):
+    """
+    Visualize Dirichlet PDF for a single digit class across different epoch values.
+
+    For a particular variance, shows how the PDFs vary by epoch.
+    Each PDF is plotted with transparency and a color corresponding to its epoch value.
+
+    Args:
+        alphas_by_epoch: Dictionary mapping epoch values to Dirichlet alpha parameters
+        digit: True digit label being analyzed
+        target_class: Which digit class (0-9) to visualize
+        k: Number of standard deviations for threshold
+        output_path: Path to save figure
+        num_samples: Number of samples from Dirichlet for PDF estimation
+        rng: Random number generator
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    if target_class < 0 or target_class >= len(list(alphas_by_epoch.values())[0]):
+        raise ValueError(
+            f"target_class must be between 0 and {len(list(alphas_by_epoch.values())[0])-1}"
+        )
+
+    # Get epoch values and sort them
+    epochs = sorted(alphas_by_epoch.keys())
+
+    # Create colormap for epochs
+    cmap = cm.get_cmap("plasma")
+    norm = mcolors.Normalize(vmin=min(epochs), vmax=max(epochs))
+    colors = [cmap(norm(e)) for e in epochs]
+
+    # Create single figure
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Plot PDF for each epoch
+    for i, epoch in enumerate(epochs):
+        alpha = alphas_by_epoch[epoch]
+
+        # Sample from Dirichlet distribution
+        dirichlet_samples = rng.dirichlet(alpha, size=num_samples)
+
+        # Plot histogram with transparency and color
+        ax.hist(
+            dirichlet_samples[:, target_class],
+            bins=50,
+            density=True,
+            alpha=0.4,
+            color=colors[i],
+            label=f"Epoch={epoch}",
+        )
+
+    # Compute mean and std for the first epoch (for reference lines)
+    first_alpha = alphas_by_epoch[epochs[0]]
+    mean, variance_stats = dirichlet_mean_variance(first_alpha)
+    std_dev = np.sqrt(variance_stats)
+    mean_val = mean[target_class]
+    std_val = std_dev[target_class]
+
+    # Add orange dashed lines for k standard deviations from mean
+    ax.axvline(
+        mean_val + k * std_val,
+        color="orange",
+        linestyle="--",
+        linewidth=2,
+        alpha=0.7,
+        label=f"±{k}σ threshold",
+    )
+    ax.axvline(
+        mean_val - k * std_val,
+        color="orange",
+        linestyle="--",
+        linewidth=2,
+        alpha=0.7,
+    )
+    # Also mark the mean
+    ax.axvline(
+        mean_val,
+        color="green",
+        linestyle="-",
+        linewidth=1.5,
+        alpha=0.5,
+        label="Mean (reference)",
+    )
+
+    ax.set_xlabel(f"P(Digit {target_class})")
+    ax.set_ylabel("Density")
+    ax.set_title(
+        f"Dirichlet PDF for Digit {target_class} by Epoch (Analyzing Digit {digit})"
+    )
+    ax.grid(True, alpha=0.3)
+    ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Dirichlet PDF plot (by epoch) saved to: {output_path}")

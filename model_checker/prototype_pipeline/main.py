@@ -6,18 +6,11 @@ Dirichlet distributions to assess plausibility of candidate distributions.
 """
 
 import argparse
-from pathlib import Path
 
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
-
-from model_checker.model.bnn import BayesianNetwork
-from model_checker.model.bnn.dataset import create_dataloader, load_mnist
-from model_checker.model.bnn.training import train_bnn
-from model_checker.prototype_pipeline.pipeline import analyze_digit
-from model_checker.umli.utils.device import get_device
+from model_checker.prototype_pipeline.pipeline import (
+    primary_pipeline,
+    variance_epoch_pipeline,
+)
 
 
 def main():
@@ -67,12 +60,6 @@ def main():
         help="Concentration parameter lambda for Dirichlet (default: 10.0)",
     )
     parser.add_argument(
-        "--noise-scale",
-        type=float,
-        default=0.1,
-        help="Scale of noise to add to predictions (default: 0.1)",
-    )
-    parser.add_argument(
         "--k-std",
         type=float,
         default=3.0,
@@ -93,110 +80,81 @@ def main():
     parser.add_argument(
         "--seed", type=int, default=42, help="Random seed for reproducibility"
     )
+    parser.add_argument(
+        "--salt-pepper-p",
+        type=float,
+        default=0.05,
+        help="Probability for salt-and-pepper noise (default: 0.05)",
+    )
+    parser.add_argument(
+        "--pipeline",
+        type=str,
+        nargs="+",
+        default=["primary"],
+        choices=["primary", "variance-epoch"],
+        help="Pipelines to run: 'primary' and/or 'variance-epoch' (default: primary)",
+    )
+    parser.add_argument(
+        "--variance-values",
+        type=float,
+        nargs="+",
+        default=[8, 16],
+        help="Variance values to test in variance-epoch pipeline",
+    )
+    parser.add_argument(
+        "--epoch-values",
+        type=int,
+        nargs="+",
+        default=[4, 6, 8],
+        help="Epoch values to test in variance-epoch pipeline",
+    )
+    parser.add_argument(
+        "--target-class",
+        type=int,
+        default=None,
+        help="Target class to visualize in variance-epoch pipeline (default: same as digit)",
+    )
 
     args = parser.parse_args()
 
-    # Set random seeds
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
-    rng = np.random.default_rng(args.seed)
-
-    # Get device
-    device = args.device or get_device()
-    print(f"{'='*70}")
-    print(f"BNN TRAINING AND DIRICHLET ANALYSIS PIPELINE")
-    print(f"{'='*70}")
-    print(f"Device: {device}")
-    print(f"Random seed: {args.seed}")
-
-    # Load datasets
-    print(f"\n{'='*70}")
-    print("LOADING DATASETS")
-    print(f"{'='*70}")
-    print("Loading MNIST training dataset...")
-    train_dataset = load_mnist(root=args.data_dir, train=True, download=True)
-    train_loader = create_dataloader(
-        train_dataset, batch_size=args.batch_size, shuffle=True
-    )
-    print(f"  Training set size: {len(train_dataset)}")
-
-    print("Loading MNIST test dataset...")
-    test_dataset = load_mnist(root=args.data_dir, train=False, download=True)
-    print(f"  Test set size: {len(test_dataset)}")
-
-    # Create model
-    print(f"\n{'='*70}")
-    print("MODEL SETUP")
-    print(f"{'='*70}")
-    print("Creating Bayesian Neural Network...")
-    model = BayesianNetwork()
-
-    # Train or load model
-    model_path = Path(args.model_path)
-    if args.train or not model_path.exists():
-        print(f"\n{'='*70}")
-        print("TRAINING MODEL")
-        print(f"{'='*70}")
-        optimizer = optim.Adam(model.parameters(), lr=args.lr)
-        criterion = nn.CrossEntropyLoss()
-
-        losses = train_bnn(
-            model=model,
-            train_loader=train_loader,
-            optimizer=optimizer,
-            criterion=criterion,
+    # Run primary pipeline if requested
+    if "primary" in args.pipeline:
+        primary_pipeline(
+            data_dir=args.data_dir,
             epochs=args.epochs,
-            device=device,
+            batch_size=args.batch_size,
+            lr=args.lr,
+            model_path=args.model_path,
+            device=args.device,
             kl_weight=args.kl_weight,
-            verbose=True,
+            train=args.train,
+            digits=args.digits,
+            lambda_concentration=args.lambda_concentration,
+            k_std=args.k_std,
+            samples=args.samples,
+            output_dir=args.output_dir,
+            seed=args.seed,
+            salt_pepper_p=args.salt_pepper_p,
         )
 
-        # Save model
-        model_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(model.state_dict(), model_path)
-        print(f"\n  Model saved to: {model_path}")
-        print(f"  Final loss: {losses[-1]:.4f}")
-    else:
-        print(f"\n{'='*70}")
-        print("LOADING MODEL")
-        print(f"{'='*70}")
-        print(f"Loading model from: {model_path}")
-        model.load_state_dict(torch.load(model_path, map_location=device))
-        model.to(device)
-        print("  Model loaded successfully")
-
-    # Analyze digits
-    print(f"\n{'='*70}")
-    print("DIRICHLET ANALYSIS")
-    print(f"{'='*70}")
-    print(f"Configuration:")
-    print(f"  Lambda (concentration): {args.lambda_concentration}")
-    print(f"  Noise scale: {args.noise_scale}")
-    print(f"  K (std dev threshold): {args.k_std}")
-    print(f"  Prediction samples: {args.samples}")
-    print(f"  Output directory: {args.output_dir}")
-
-    for digit in args.digits:
-        if digit not in range(10):
-            print(f"\n  WARNING: Skipping invalid digit {digit} (must be 0-9)")
-            continue
-
-        analyze_digit(
-            model=model,
-            test_dataset=test_dataset,
-            digit=digit,
+    # Run variance-epoch pipeline if requested
+    if "variance-epoch" in args.pipeline:
+        variance_epoch_pipeline(
+            data_dir=args.data_dir,
+            batch_size=args.batch_size,
+            lr=args.lr,
+            device=args.device,
+            kl_weight=args.kl_weight,
+            digits=args.digits,
             lambda_concentration=args.lambda_concentration,
-            noise_scale=args.noise_scale,
             k=args.k_std,
             samples=args.samples,
-            device=device,
-            rng=rng,
             output_dir=args.output_dir,
+            seed=args.seed,
+            variance_values=args.variance_values,
+            epoch_values=args.epoch_values,
+            target_class=args.target_class,
         )
-
-    print(f"\n{'='*70}")
-    print("PIPELINE COMPLETE")
-    print(f"{'='*70}\n")
 
 
 if __name__ == "__main__":
