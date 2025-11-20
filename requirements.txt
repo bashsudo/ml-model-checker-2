@@ -1,0 +1,13 @@
+torch
+tensorflow
+jax
+jaxlib
+transformers
+datasets
+xgboost
+scikit-learn
+pandas
+pyyaml
+joblib
+matplotlib
+torchvision
