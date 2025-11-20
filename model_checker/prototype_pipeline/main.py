@@ -98,7 +98,7 @@ def main():
         "--variance-values",
         type=float,
         nargs="+",
-        default=[8, 16],
+        default=[1, 2, 4, 8, 16],
         help="Variance values to test in variance-epoch pipeline",
     )
     parser.add_argument(
