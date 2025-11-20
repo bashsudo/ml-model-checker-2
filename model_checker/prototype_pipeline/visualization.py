@@ -6,9 +6,6 @@ import numpy as np
 from model_checker.prototype_pipeline.dirichlet import dirichlet_mean_variance
 
 
-from model_checker.prototype_pipeline.dirichlet import dirichlet_mean_variance
-
-
 def visualize_dirichlet_pdf(
     alpha: np.ndarray,
     digit: int,

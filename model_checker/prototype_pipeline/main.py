@@ -20,12 +20,6 @@ from model_checker.prototype_pipeline.pipeline import analyze_digit
 from model_checker.umli.utils.device import get_device
 
 
-
-
-
-
-
-
 def main():
     """Main pipeline function."""
     parser = argparse.ArgumentParser(
