@@ -91,8 +91,8 @@ def main():
         type=str,
         nargs="+",
         default=["primary"],
-        choices=["primary", "variance-epoch"],
-        help="Pipelines to run: 'primary' and/or 'variance-epoch' (default: primary)",
+        choices=["primary", "by-variance", "by-epoch"],
+        help="Pipelines to run: 'primary', 'by-variance', and/or 'by-epoch' (default: primary)",
     )
     parser.add_argument(
         "--variance-values",
@@ -137,8 +137,14 @@ def main():
             salt_pepper_p=args.salt_pepper_p,
         )
 
-    # Run variance-epoch pipeline if requested
-    if "variance-epoch" in args.pipeline:
+    # Run variance-epoch pipeline if by-variance or by-epoch is requested
+    if "by-variance" in args.pipeline or "by-epoch" in args.pipeline:
+        visualization_types = set()
+        if "by-variance" in args.pipeline:
+            visualization_types.add("variance")
+        if "by-epoch" in args.pipeline:
+            visualization_types.add("epoch")
+
         variance_epoch_pipeline(
             data_dir=args.data_dir,
             batch_size=args.batch_size,
@@ -154,6 +160,7 @@ def main():
             variance_values=args.variance_values,
             epoch_values=args.epoch_values,
             target_class=args.target_class,
+            visualization_types=visualization_types,
         )
 
 

@@ -354,6 +354,7 @@ def variance_epoch_pipeline(
     variance_values: Optional[List[float]] = None,
     epoch_values: Optional[List[int]] = None,
     target_class: Optional[int] = None,
+    visualization_types: Optional[set[str]] = None,
 ):
     """
     Variance-epoch pipeline for analyzing how variance and epochs affect Dirichlet PDFs.
@@ -376,6 +377,8 @@ def variance_epoch_pipeline(
         variance_values: List of variance values to test (default: [1, 2, 4, 8, 16, 32, 64, 128, 256, 1024])
         epoch_values: List of epoch values to test (default: [2, 4, 6, 8])
         target_class: Which digit class to visualize (default: same as digit being analyzed)
+        visualization_types: Set of visualization types to generate: {"variance", "epoch"} or both
+                             (default: {"variance", "epoch"} - generates both)
     """
     if variance_values is None:
         variance_values = [1, 16]
@@ -383,6 +386,8 @@ def variance_epoch_pipeline(
         epoch_values = [4, 6, 8]
     if digits is None:
         digits = [0]
+    if visualization_types is None:
+        visualization_types = {"variance", "epoch"}
 
     # Set random seeds
     torch.manual_seed(seed)
@@ -504,31 +509,33 @@ def variance_epoch_pipeline(
 
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-        # For each epoch, visualize by variance
-        for epoch in epoch_values:
-            if epoch in alphas_by_variance_for_epoch:
-                output_path = f"{output_dir}/digit_{digit}_epoch_{epoch}_by_variance_class_{target_class_to_use}.png"
-                visualize_dirichlet_pdf_single_digit_by_variance(
-                    alphas_by_variance=alphas_by_variance_for_epoch[epoch],
-                    digit=digit,
-                    target_class=target_class_to_use,
-                    k=k,
-                    output_path=output_path,
-                    rng=rng,
-                )
+        # For each epoch, visualize by variance (if requested)
+        if "variance" in visualization_types:
+            for epoch in epoch_values:
+                if epoch in alphas_by_variance_for_epoch:
+                    output_path = f"{output_dir}/digit_{digit}_epoch_{epoch}_by_variance_class_{target_class_to_use}.png"
+                    visualize_dirichlet_pdf_single_digit_by_variance(
+                        alphas_by_variance=alphas_by_variance_for_epoch[epoch],
+                        digit=digit,
+                        target_class=target_class_to_use,
+                        k=k,
+                        output_path=output_path,
+                        rng=rng,
+                    )
 
-        # For each variance, visualize by epoch
-        for variance in variance_values:
-            if variance in alphas_by_epoch_for_variance:
-                output_path = f"{output_dir}/digit_{digit}_variance_{variance}_by_epoch_class_{target_class_to_use}.png"
-                visualize_dirichlet_pdf_single_digit_by_epoch(
-                    alphas_by_epoch=alphas_by_epoch_for_variance[variance],
-                    digit=digit,
-                    target_class=target_class_to_use,
-                    k=k,
-                    output_path=output_path,
-                    rng=rng,
-                )
+        # For each variance, visualize by epoch (if requested)
+        if "epoch" in visualization_types:
+            for variance in variance_values:
+                if variance in alphas_by_epoch_for_variance:
+                    output_path = f"{output_dir}/digit_{digit}_variance_{variance}_by_epoch_class_{target_class_to_use}.png"
+                    visualize_dirichlet_pdf_single_digit_by_epoch(
+                        alphas_by_epoch=alphas_by_epoch_for_variance[variance],
+                        digit=digit,
+                        target_class=target_class_to_use,
+                        k=k,
+                        output_path=output_path,
+                        rng=rng,
+                    )
 
     print(f"\n{'='*70}")
     print("VARIANCE-EPOCH PIPELINE COMPLETE")
